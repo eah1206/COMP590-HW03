@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<!--
+Created using JS Bin
+http://jsbin.com
+
+Copyright (c) 2024 by eah1206 (http://jsbin.com/tudatax/6/edit)
+
+Released under the MIT license: http://jsbin.mit-license.org
+-->
+<meta name="robots" content="noindex">
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <title>JS Bin</title>
+</head>
+<body>
+<canvas id="canvas" width="640" 
+		height="480" style="border:1px solid #000;">
+		 Your browser does not support the canvas element.
+  </canvas>
+  		<input type="range"  min="1" max="60" value="60" onchange="updateFrameRate(this.value)"/>
+		<span id="FrameRateLabel">60</span>
+<script id="jsbin-javascript">
+var keysdown = {};
+
+//Event listener for when the user presses a key
+window.addEventListener("keydown", function (event) {
+  if (event.defaultPrevented) {
+    return; // Do nothing if the event was already processed
+  }
+  
+  keysdown[event.key] = true;
+
+  // Cancel the default action to avoid it being handled twice
+  event.preventDefault();
+}, true);
+
+//Event listener for when the user releases a key
+window.addEventListener("keyup", function (event) {
+  if (event.defaultPrevented) {
+    return; // Do nothing if the event was already processed
+  }
+  
+  keysdown[event.key] = false;
+
+  event.preventDefault();
+}, true);
+
+var maxFps = 60; //max FPS allowed
+function updateFrameRate(newFrameRate)
+{
+	maxFps = newFrameRate;
+	document.getElementById("FrameRateLabel").innerHTML=maxFps;
+}
+
+window.onload = function() {
+  // The canvas and context variables necessary to draw
+  var canvas = document.getElementById("canvas");
+  var context = canvas.getContext("2d");
+  
+  // This will be the ufo that moves around the screen
+  var ufo = {x:canvas.width/2, // The center of the base of the ufo
+             y:canvas.height/2, // The center of the base of the ufo
+             x_velocity:0,
+             y_velocity:0,
+             rad:40, // radius of the ufo
+             dist: 0, // Used for orb rotation (resets at 72)
+             ang: 0
+             };
+  var laser = {x:canvas.width/2,
+               y:0,
+               x_vel: 3,
+               y_vel: 3,
+               dist: 101,
+               ang: 0};
+  
+  var two_pi = 2*Math.PI;
+  var fps = 0;
+  var framesThisSecond = 0;
+  var timestep = 1000 / 60;
+  var delta = 0;
+  var lastFrameTimeMs = 0;
+  var lastFpsUpdate = 0;
+  var numUpdateSteps = 0;
+  var frameCount = 0;
+  //setInterval(function() { fps = framesThisSecond; framesThisSecond = 0; }, 1000);
+  function panic() {
+    delta = 0;
+  }
+  
+  //The game loop
+  function mainLoop(timestamp) {
+    processInput();
+    if (timestamp < lastFrameTimeMs + (1000 / maxFps)) {
+        requestAnimationFrame(mainLoop);
+        return;
+    }
+    delta += timestamp - lastFrameTimeMs;
+    lastFrameTimeMs = timestamp;
+    if (timestamp > lastFpsUpdate + 1000) {
+        fps = 0.25 * framesThisSecond + 0.75 * fps;
+
+        lastFpsUpdate = timestamp;
+        framesThisSecond = 0;
+    }
+    framesThisSecond++;
+
+    numUpdateSteps = 0;
+    while (delta >= timestep) {
+        update(timestep);
+        delta -= timestep;
+        if (++numUpdateSteps >= 240) {
+            panic();
+            break;
+        }
+    }
+    draw();
+    
+    requestAnimationFrame(mainLoop);
+  }
+
+requestAnimationFrame(mainLoop);
+
+  function processInput() {
+    if (keysdown.a) {
+      ufo.ang -= 0.05;
+    }
+    if (keysdown.d) {
+      ufo.ang += 0.05;
+    }
+    if (keysdown.ArrowLeft) {
+      ufo.x_velocity = -2;
+    }
+    if (keysdown.ArrowRight) {
+      ufo.x_velocity = 2;
+    }
+    if (keysdown.ArrowUp) {
+      ufo.y_velocity = -2;
+    }
+    if (keysdown.ArrowDown) {
+      ufo.y_velocity = 2;
+    }
+  }
+  
+  function update(delta) {
+    // Checks if the next step is out of bounds. If it is, move in the opposite direction
+    // Compensates for the size of the 
+
+    if ((ufo.x  + ufo.rad + ufo.x_velocity) > canvas.width) {
+        ufo.x_velocity = 0;
+        }
+    if ((ufo.x - ufo.rad + ufo.x_velocity) < 0) {
+        ufo.x_velocity = 0;
+        }
+    if ((ufo.y + ufo.rad + ufo.y_velocity) > canvas.height) {
+        ufo.y_velocity = 0;
+        }
+    if ((ufo.y - ufo.rad + ufo.y_velocity) < 0) {
+        ufo.y_velocity = 0;
+        }
+    ufo.x += ufo.x_velocity * delta;
+    ufo.y += ufo.y_velocity * delta;
+    ufo.x_velocity = 0;
+    ufo.y_velocity = 0;
+    updateBounds();
+    checkAngle();
+  }
+  
+  function draw() {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.save();
+    drawLaser();
+    context.translate(ufo.x, ufo.y);
+    drawBase();
+    drawHead();
+    drawTriangle();
+    for (let i = 0; i < 5; i++) {
+      context.save();
+      context.rotate((ufo.dist + 72*i)*Math.PI/180);
+      drawOrb();
+      context.restore();
+    }
+    ufo.dist++;
+    if (ufo.dist > 72) {
+      ufo.dist = 0;
+    }
+    context.restore();
+    //draw the fps counter
+    context.fillText("FPS: " + fps, 10, 10);
+              
+    //count a frame as drawn
+    ++framesThisSecond;
+              
+    ++frameCount;
+    if (frameCount < 100) {
+        console.log("frame: " + frameCount);
+    }
+  }
+  
+  function drawHead() {
+    context.beginPath();
+    context.arc(0, 0, ufo.rad-20, 0, 2*Math.PI, false);
+    context.fillStyle = "gray";
+    context.fill();
+  }
+  
+  function drawBase() {
+    context.beginPath();
+    context.arc(0, 0, ufo.rad, 0, 2*Math.PI, false);
+    context.fillStyle = "black";
+    context.fill();
+  }
+  
+  function drawOrb() {
+    context.beginPath();
+    context.arc(0, ufo.rad-10, 7, 2*Math.PI, false);
+    context.fillStyle = "cyan";
+    context.fill();
+  }
+  
+  function drawLaser() {
+    if (laser.dist > 50) { // Forgets the current laser, and sets the variables according to the ufo
+      laser.ang = ufo.ang;
+      laser.x=ufo.x;
+      laser.y=ufo.y;
+      laser.dist=0;
+      laser.x_vel = 3;
+      //laser.y_vel = ufo.y_velocity*2;
+    }
+    context.save();
+    context.rotate(laser.ang);
+    context.translate(laser.x, laser.y);
+    context.beginPath();
+    context.moveTo(0, 0);
+    context.lineTo(5*(laser.x_vel), 0);
+    context.lineWidth = 3;
+    context.strokeStyle = "red";
+    context.stroke();
+    context.restore();
+    laser.x += laser.x_vel;
+    laser.dist++;
+  }
+  
+  function drawTriangle() {
+    context.save();
+    context.rotate(ufo.ang);
+    context.beginPath();
+    context.moveTo(ufo.rad, 0);
+    context.lineTo(21, 10);
+    context.lineTo(21, -10);
+    context.fillStyle = "red";
+    context.fill();
+    context.restore();
+  }
+  
+  function checkAngle() {
+    if (ufo.ang < 0) {
+      ufo.ang += two_pi;
+    }
+    if (ufo.ang > two_pi) {
+      ufo.ang -= two_pi;
+    }
+  }
+  function updateBounds() {
+    if (ufo.x < ufo.rad) {
+      ufo.x = ufo.rad;
+    }
+    if (ufo.x > canvas.width - ufo.rad) {
+      ufo.x = canvas.width - ufo.rad;
+    }
+    if (ufo.y < ufo.rad) {
+      ufo.y = ufo.rad;
+    }
+    if (ufo.y > canvas.height - ufo.rad) {
+      ufo.x = canvas.height - ufo.rad;
+    }
+  }
+
+}
+</script>
+</body>
+</html>
